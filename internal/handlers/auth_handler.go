@@ -12,12 +12,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type AuthRepo struct {
+type AuthHandler struct {
 	Dao *database.Queries
 	Ctx context.Context
 }
 
-func (r *AuthRepo) UpdateRefreshToken(id int32, refreshToken *string) error {
+func (r *AuthHandler) UpdateRefreshToken(id int32, refreshToken *string) error {
 	if id <= 0 {
 		return fmt.Errorf("invalid user ID: %d", id)
 	}
@@ -40,7 +40,7 @@ func (r *AuthRepo) UpdateRefreshToken(id int32, refreshToken *string) error {
 		}
 	}
 
-	_, err := r.Dao.UpdateUser(r.Ctx, database.UpdateUserParams{
+	_, err := r.Dao.UpdateUserRefreshToken(r.Ctx, database.UpdateUserRefreshTokenParams{
 		ID:           id,
 		RefreshToken: hashedRefreshToken,
 	})
@@ -56,7 +56,7 @@ type LoginDTO struct {
 	Password string `json:"password" binding:"required,min=8,max=100"`
 }
 
-func (r *AuthRepo) Login(c *gin.Context) {
+func (r *AuthHandler) Login(c *gin.Context) {
 	var input LoginDTO
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -81,21 +81,24 @@ func (r *AuthRepo) Login(c *gin.Context) {
 		return
 	}
 
-	tokens, err := utils.GenerateTokens(existingUser.ID)
+	tokens, err := utils.GenerateTokens(existingUser.ID, existingUser.TokenVersion)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
 		return
 	}
 
-	updateRefreshTokenErr := r.UpdateRefreshToken(existingUser.ID, &tokens.RefreshToken)
-	if updateRefreshTokenErr != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": updateRefreshTokenErr.Error()})
+	updateErr := r.UpdateRefreshToken(existingUser.ID, nil)
+	if updateErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 0,
+			"msg":  updateErr.Error(),
+		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 1,
-		"msg":  "Login successfuly!",
+		"msg":  "Login successfully!",
 		"data": gin.H{
 			"access_token":  tokens.AccessToken,
 			"refresh_token": tokens.RefreshToken,
@@ -106,10 +109,10 @@ func (r *AuthRepo) Login(c *gin.Context) {
 type RegisterDTO struct {
 	Email       string `json:"email" binding:"required,email"`
 	Password    string `json:"password" binding:"required,min=8,max=100"`
-	DisplayName string `json:"displayName" binding:"required,min=1,max=35"`
+	DisplayName string `json:"display_name" binding:"required,min=1,max=35"`
 }
 
-func (r *AuthRepo) Register(c *gin.Context) {
+func (r *AuthHandler) Register(c *gin.Context) {
 	var input RegisterDTO
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -165,7 +168,7 @@ func (r *AuthRepo) Register(c *gin.Context) {
 		return
 	}
 
-	tokens, err := utils.GenerateTokens(int32(id))
+	tokens, err := utils.GenerateTokens(int32(id), 0)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 0,
@@ -174,11 +177,11 @@ func (r *AuthRepo) Register(c *gin.Context) {
 		return
 	}
 
-	updateRefreshTokenErr := r.UpdateRefreshToken(int32(id), &tokens.RefreshToken)
-	if updateRefreshTokenErr != nil {
+	updateErr := r.UpdateRefreshToken(int32(id), nil)
+	if updateErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 0,
-			"msg":  updateRefreshTokenErr.Error(),
+			"msg":  updateErr.Error(),
 		})
 		return
 	}
@@ -193,7 +196,7 @@ func (r *AuthRepo) Register(c *gin.Context) {
 	})
 }
 
-func (r *AuthRepo) Logout(c *gin.Context) {
+func (r *AuthHandler) Logout(c *gin.Context) {
 	userId, ok := c.Get("user_id")
 	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -203,11 +206,20 @@ func (r *AuthRepo) Logout(c *gin.Context) {
 		return
 	}
 
-	err := r.UpdateRefreshToken(int32(userId.(int)), nil)
-	if err != nil {
+	id, ok := userId.(int32)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 0,
+			"msg":  "Covert user ID error",
+		})
+		return
+	}
+
+	updateErr := r.UpdateRefreshToken(id, nil)
+	if updateErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 0,
-			"msg":  err.Error(),
+			"msg":  updateErr.Error(),
 		})
 		return
 	}
@@ -218,12 +230,21 @@ func (r *AuthRepo) Logout(c *gin.Context) {
 	})
 }
 
-func (r *AuthRepo) Refresh(c *gin.Context) {
+func (r *AuthHandler) Refresh(c *gin.Context) {
 	userId, ok := c.Get("user_id")
 	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 0,
 			"msg":  "Invalid user ID",
+		})
+		return
+	}
+
+	id, ok := userId.(int32)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 0,
+			"msg":  "Covert user ID error",
 		})
 		return
 	}
@@ -237,7 +258,7 @@ func (r *AuthRepo) Refresh(c *gin.Context) {
 		return
 	}
 
-	user, err := r.Dao.GetUser(r.Ctx, int32(userId.(int)))
+	user, err := r.Dao.GetUser(r.Ctx, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 0,
@@ -246,7 +267,24 @@ func (r *AuthRepo) Refresh(c *gin.Context) {
 		return
 	}
 
-	isValidRefreshToken, err := utils.Verify(refreshToken.(string), user.RefreshToken.String)
+	ok, verifyErr := utils.Verify(refreshToken.(string), user.RefreshToken.String)
+	if verifyErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 0,
+			"msg":  verifyErr.Error(),
+		})
+		return
+	}
+
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"code": 0,
+			"msg":  "Invalid refresh token!",
+		})
+		return
+	}
+
+	tokens, err := utils.GenerateTokens(id, user.TokenVersion)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 0,
@@ -255,28 +293,11 @@ func (r *AuthRepo) Refresh(c *gin.Context) {
 		return
 	}
 
-	if !isValidRefreshToken {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 0,
-			"msg":  "Invalid refresh token",
-		})
-		return
-	}
-
-	tokens, err := utils.GenerateTokens(int32(userId.(int)))
-	if err != nil {
+	updateErr := r.UpdateRefreshToken(id, &tokens.RefreshToken)
+	if updateErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 0,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	updateRefreshTokenErr := r.UpdateRefreshToken(int32(userId.(int)), &tokens.RefreshToken)
-	if updateRefreshTokenErr != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": 0,
-			"msg":  updateRefreshTokenErr.Error(),
+			"msg":  updateErr.Error(),
 		})
 		return
 	}

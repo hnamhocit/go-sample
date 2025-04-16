@@ -18,9 +18,9 @@ VALUES
 `
 
 type CreateUserParams struct {
-	DisplayName string
-	Email       string
-	Password    string
+	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
+	Password    string `json:"password"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (sql.Result, error) {
@@ -40,7 +40,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id int32) error {
 
 const getUser = `-- name: GetUser :one
 SELECT
-	id, display_name, email, password, refresh_token, role, created_at, updated_at, bio, photo_url, background_url
+	id, display_name, email, password, refresh_token, bio, photo_url, background_url, role, token_version, created_at, updated_at
 FROM
 	users
 WHERE
@@ -56,19 +56,20 @@ func (q *Queries) GetUser(ctx context.Context, id int32) (User, error) {
 		&i.Email,
 		&i.Password,
 		&i.RefreshToken,
-		&i.Role,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 		&i.Bio,
 		&i.PhotoUrl,
 		&i.BackgroundUrl,
+		&i.Role,
+		&i.TokenVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT
-	id, display_name, email, password, refresh_token, role, created_at, updated_at, bio, photo_url, background_url
+	id, display_name, email, password, refresh_token, bio, photo_url, background_url, role, token_version, created_at, updated_at
 FROM
 	users
 WHERE
@@ -84,25 +85,53 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.Email,
 		&i.Password,
 		&i.RefreshToken,
-		&i.Role,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 		&i.Bio,
 		&i.PhotoUrl,
 		&i.BackgroundUrl,
+		&i.Role,
+		&i.TokenVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const getUsers = `-- name: GetUsers :many
+const getUserTokenVersion = `-- name: GetUserTokenVersion :one
 SELECT
-	id, display_name, email, password, refresh_token, role, created_at, updated_at, bio, photo_url, background_url
+	token_version
 FROM
 	users
+WHERE
+	id = ?
 `
 
-func (q *Queries) GetUsers(ctx context.Context) ([]User, error) {
-	rows, err := q.db.QueryContext(ctx, getUsers)
+func (q *Queries) GetUserTokenVersion(ctx context.Context, id int32) (int32, error) {
+	row := q.db.QueryRowContext(ctx, getUserTokenVersion, id)
+	var token_version int32
+	err := row.Scan(&token_version)
+	return token_version, err
+}
+
+const getUsers = `-- name: GetUsers :many
+SELECT
+	id, display_name, email, password, refresh_token, bio, photo_url, background_url, role, token_version, created_at, updated_at
+FROM
+	users
+ORDER BY
+	id
+LIMIT
+	?
+OFFSET
+	?
+`
+
+type GetUsersParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) GetUsers(ctx context.Context, arg GetUsersParams) ([]User, error) {
+	rows, err := q.db.QueryContext(ctx, getUsers, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -116,12 +145,13 @@ func (q *Queries) GetUsers(ctx context.Context) ([]User, error) {
 			&i.Email,
 			&i.Password,
 			&i.RefreshToken,
-			&i.Role,
-			&i.CreatedAt,
-			&i.UpdatedAt,
 			&i.Bio,
 			&i.PhotoUrl,
 			&i.BackgroundUrl,
+			&i.Role,
+			&i.TokenVersion,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -139,20 +169,20 @@ func (q *Queries) GetUsers(ctx context.Context) ([]User, error) {
 const updateUser = `-- name: UpdateUser :execresult
 UPDATE users
 SET
-	display_name = COALESCE(?, display_name),
-	email = COALESCE(?, email),
-	password = COALESCE(?, password),
-	refresh_token = COALESCE(?, refresh_token)
+	display_name = ?,
+	email = ?,
+	password = ?,
+	bio = ?
 WHERE
 	id = ?
 `
 
 type UpdateUserParams struct {
-	DisplayName  string
-	Email        string
-	Password     string
-	RefreshToken sql.NullString
-	ID           int32
+	DisplayName string         `json:"display_name"`
+	Email       string         `json:"email"`
+	Password    string         `json:"password"`
+	Bio         sql.NullString `json:"bio"`
+	ID          int32          `json:"id"`
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (sql.Result, error) {
@@ -160,7 +190,59 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (sql.Res
 		arg.DisplayName,
 		arg.Email,
 		arg.Password,
-		arg.RefreshToken,
+		arg.Bio,
 		arg.ID,
 	)
+}
+
+const updateUserBackgroundURL = `-- name: UpdateUserBackgroundURL :execresult
+UPDATE users
+SET
+	background_url = ?
+WHERE
+	id = ?
+`
+
+type UpdateUserBackgroundURLParams struct {
+	BackgroundUrl sql.NullString `json:"background_url"`
+	ID            int32          `json:"id"`
+}
+
+func (q *Queries) UpdateUserBackgroundURL(ctx context.Context, arg UpdateUserBackgroundURLParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, updateUserBackgroundURL, arg.BackgroundUrl, arg.ID)
+}
+
+const updateUserPhotoURL = `-- name: UpdateUserPhotoURL :execresult
+UPDATE users
+SET
+	photo_url = ?
+WHERE
+	id = ?
+`
+
+type UpdateUserPhotoURLParams struct {
+	PhotoUrl sql.NullString `json:"photo_url"`
+	ID       int32          `json:"id"`
+}
+
+func (q *Queries) UpdateUserPhotoURL(ctx context.Context, arg UpdateUserPhotoURLParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, updateUserPhotoURL, arg.PhotoUrl, arg.ID)
+}
+
+const updateUserRefreshToken = `-- name: UpdateUserRefreshToken :execresult
+UPDATE users
+SET
+	refresh_token = ?,
+	token_version = token_version + 1
+WHERE
+	id = ?
+`
+
+type UpdateUserRefreshTokenParams struct {
+	RefreshToken sql.NullString `json:"refresh_token"`
+	ID           int32          `json:"id"`
+}
+
+func (q *Queries) UpdateUserRefreshToken(ctx context.Context, arg UpdateUserRefreshTokenParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, updateUserRefreshToken, arg.RefreshToken, arg.ID)
 }

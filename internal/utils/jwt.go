@@ -3,14 +3,9 @@ package utils
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-)
-
-var (
-	key string
-	t   *jwt.Token
-	s   string
 )
 
 type Tokens struct {
@@ -18,43 +13,73 @@ type Tokens struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-func GenerateToken(sub int32, secretKey string) (string, error) {
-	key = os.Getenv(secretKey)
-	t = jwt.NewWithClaims(jwt.SigningMethodES256,
-		jwt.MapClaims{
-			"sub": sub,
-		})
-
-	s, err := t.SignedString(key)
-
-	return s, err
+type Claims struct {
+	Sub          int32 `json:"sub"`
+	TokenVersion int32 `json:"token_version"`
+	jwt.RegisteredClaims
 }
 
-func VerifyToken(tokenString string, secretKey string) (jwt.Claims, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return []byte(os.Getenv(secretKey)), nil
-	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
-	if err != nil {
-		return nil, err
+func GenerateToken(sub int32, token_version int32, secretKey string) (string, error) {
+	key := os.Getenv(secretKey)
+	if key == "" {
+		return "", fmt.Errorf("missing secret key: %s", secretKey)
 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
+	expiredAt := 1 // default expiration time
+	if secretKey == "JWT_REFRESH_SECRET" {
+		expiredAt = 24 * 7 // 7 days
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, &Claims{
+		Sub:          sub,
+		TokenVersion: token_version,
+		RegisteredClaims: jwt.RegisteredClaims{
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(expiredAt) * time.Hour)),
+		},
+	})
+
+	signedString, err := token.SignedString([]byte(key))
+	if err != nil {
+		return "", fmt.Errorf("failed to sign token: %w", err)
+	}
+
+	return signedString, nil
+}
+
+func VerifyToken(tokenString string, secretKey string) (*Claims, error) {
+	key := os.Getenv(secretKey)
+	if key == "" {
+		return nil, fmt.Errorf("missing secret key: %s", secretKey)
+	}
+
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(key), nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse token: %w", err)
+	}
+
+	claims, ok := token.Claims.(*Claims)
+	if !ok || !token.Valid {
 		return nil, fmt.Errorf("invalid token claims")
 	}
 
 	return claims, nil
 }
 
-func GenerateTokens(sub int32) (*Tokens, error) {
-	accessToken, err := GenerateToken(sub, "JWT_ACCESS_SECRET")
+func GenerateTokens(sub, token_version int32) (*Tokens, error) {
+	accessToken, err := GenerateToken(sub, token_version, "JWT_ACCESS_SECRET")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	refreshToken, err := GenerateToken(sub, "JWT_REFRESH_SECRET")
+	refreshToken, err := GenerateToken(sub, token_version, "JWT_REFRESH_SECRET")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
 
 	return &Tokens{

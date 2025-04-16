@@ -1,16 +1,17 @@
 package middlewares
 
 import (
+	"context"
 	"net/http"
+	"sample/internal/database"
 	"sample/internal/utils"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
-func RefreshTokenMiddleware() gin.HandlerFunc {
+func RefreshTokenMiddleware(dao *database.Queries, ctx context.Context) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Implementation of access token middleware\
 		authorization := c.GetHeader("Authorization")
 		if authorization == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized,
@@ -36,12 +37,12 @@ func RefreshTokenMiddleware() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized,
 				gin.H{
 					"code": 0,
-					"msg":  err.Error(),
+					"msg":  "Verify token error: " + err.Error(),
 				})
 			return
 		}
 
-		sub, err := claims.GetSubject()
+		tokenVersion, err := dao.GetUserTokenVersion(ctx, claims.Sub)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized,
 				gin.H{
@@ -51,8 +52,16 @@ func RefreshTokenMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// save user id, refresh token in context
-		c.Set("user_id", sub)
+		if tokenVersion != claims.TokenVersion {
+			c.AbortWithStatusJSON(http.StatusUnauthorized,
+				gin.H{
+					"code": 0,
+					"msg":  "Token version mismatch",
+				})
+			return
+		}
+
+		c.Set("user_id", claims.Sub)
 		c.Set("refresh_token", tokenString)
 
 		c.Next()

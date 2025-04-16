@@ -2,7 +2,21 @@
 SELECT
 	*
 FROM
-	users;
+	users
+ORDER BY
+	id
+LIMIT
+	?
+OFFSET
+	?;
+
+-- name: GetUserTokenVersion :one
+SELECT
+	token_version
+FROM
+	users
+WHERE
+	id = ?;
 
 -- name: GetUser :one
 SELECT
@@ -29,10 +43,32 @@ VALUES
 -- name: UpdateUser :execresult
 UPDATE users
 SET
-	display_name = COALESCE(?, display_name),
-	email = COALESCE(?, email),
-	password = COALESCE(?, password),
-	refresh_token = COALESCE(?, refresh_token)
+	display_name = ?,
+	email = ?,
+	password = ?,
+	bio = ?
+WHERE
+	id = ?;
+
+-- name: UpdateUserRefreshToken :execresult
+UPDATE users
+SET
+	refresh_token = ?,
+	token_version = token_version + 1
+WHERE
+	id = ?;
+
+-- name: UpdateUserPhotoURL :execresult
+UPDATE users
+SET
+	photo_url = ?
+WHERE
+	id = ?;
+
+-- name: UpdateUserBackgroundURL :execresult
+UPDATE users
+SET
+	background_url = ?
 WHERE
 	id = ?;
 

@@ -20,11 +20,19 @@ func Run() {
 	{
 		auth := api.Group("auth")
 		{
-			authRepo := handlers.AuthRepo{Dao: dao, Ctx: ctx}
-			auth.POST("login", authRepo.Login)
-			auth.POST("register", authRepo.Register)
-			auth.GET("refresh", middlewares.RefreshTokenMiddleware(), authRepo.Refresh)
-			auth.GET("logout", middlewares.AccessTokenMiddleware(), authRepo.Logout)
+			authHandler := handlers.AuthHandler{Dao: dao, Ctx: ctx}
+			auth.POST("login", authHandler.Login)
+			auth.POST("register", authHandler.Register)
+			auth.GET("refresh", middlewares.RefreshTokenMiddleware(dao, ctx), authHandler.Refresh)
+			auth.GET("logout", middlewares.RefreshTokenMiddleware(dao, ctx), authHandler.Logout)
+		}
+
+		users := api.Group("users")
+		{
+			usersHandler := handlers.UserHandler{Dao: dao, Ctx: ctx}
+			users.GET("", usersHandler.GetUsers)
+			users.GET("me", middlewares.AccessTokenMiddleware(dao, ctx), usersHandler.GetUser)
+			users.GET(":id", usersHandler.GetUser)
 		}
 	}
 
