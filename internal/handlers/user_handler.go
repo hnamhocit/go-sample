@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"log"
 	"sample/internal/database"
 	"sample/internal/dtos"
 
@@ -24,8 +23,6 @@ func (r *UserHandler) GetUsers(c *gin.Context) {
 		})
 		return
 	}
-
-	log.Println("Pagination:", pagination)
 
 	users, err := r.Dao.GetUsers(c, database.GetUsersParams{
 		Limit:  int32(pagination.Size),

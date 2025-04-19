@@ -76,3 +76,14 @@ WHERE
 DELETE FROM users
 WHERE
 	id = ?;
+
+-- name: UploadMedia :execresult
+INSERT INTO
+	media (user_id, name, content_type, path, size)
+VALUES
+	(?, ?, ?, ?, ?);
+
+-- name: DeleteMedia :execresult
+DELETE FROM media
+where
+	id = ?;

@@ -81,7 +81,7 @@ func (r *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	tokens, err := utils.GenerateTokens(existingUser.ID, existingUser.TokenVersion)
+	tokens, err := utils.GenerateTokens(existingUser.ID, existingUser.TokenVersion+1)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
 		return

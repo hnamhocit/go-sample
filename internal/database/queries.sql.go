@@ -27,6 +27,16 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (sql.Res
 	return q.db.ExecContext(ctx, createUser, arg.DisplayName, arg.Email, arg.Password)
 }
 
+const deleteMedia = `-- name: DeleteMedia :execresult
+DELETE FROM media
+where
+	id = ?
+`
+
+func (q *Queries) DeleteMedia(ctx context.Context, id int32) (sql.Result, error) {
+	return q.db.ExecContext(ctx, deleteMedia, id)
+}
+
 const deleteUser = `-- name: DeleteUser :exec
 DELETE FROM users
 WHERE
@@ -245,4 +255,29 @@ type UpdateUserRefreshTokenParams struct {
 
 func (q *Queries) UpdateUserRefreshToken(ctx context.Context, arg UpdateUserRefreshTokenParams) (sql.Result, error) {
 	return q.db.ExecContext(ctx, updateUserRefreshToken, arg.RefreshToken, arg.ID)
+}
+
+const uploadMedia = `-- name: UploadMedia :execresult
+INSERT INTO
+	media (user_id, name, content_type, path, size)
+VALUES
+	(?, ?, ?, ?, ?)
+`
+
+type UploadMediaParams struct {
+	UserID      int32  `json:"user_id"`
+	Name        string `json:"name"`
+	ContentType string `json:"content_type"`
+	Path        string `json:"path"`
+	Size        int32  `json:"size"`
+}
+
+func (q *Queries) UploadMedia(ctx context.Context, arg UploadMediaParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, uploadMedia,
+		arg.UserID,
+		arg.Name,
+		arg.ContentType,
+		arg.Path,
+		arg.Size,
+	)
 }

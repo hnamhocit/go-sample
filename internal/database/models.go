@@ -53,6 +53,17 @@ func (ns NullUsersRole) Value() (driver.Value, error) {
 	return string(ns.UsersRole), nil
 }
 
+type Medium struct {
+	ID          int32     `json:"id"`
+	Name        string    `json:"name"`
+	Path        string    `json:"path"`
+	ContentType string    `json:"content_type"`
+	Size        int32     `json:"size"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	UserID      int32     `json:"user_id"`
+}
+
 type User struct {
 	ID            int32          `json:"id"`
 	DisplayName   string         `json:"display_name"`

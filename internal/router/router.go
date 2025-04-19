@@ -29,12 +29,20 @@ func Run() {
 
 		users := api.Group("users")
 		{
-			usersHandler := handlers.UserHandler{Dao: dao, Ctx: ctx}
-			users.GET("", usersHandler.GetUsers)
-			users.GET("me", middlewares.AccessTokenMiddleware(dao, ctx), usersHandler.GetUser)
-			users.GET(":id", usersHandler.GetUser)
+			userHandler := handlers.UserHandler{Dao: dao, Ctx: ctx}
+			users.GET("", userHandler.GetUsers)
+			users.GET("me", middlewares.AccessTokenMiddleware(dao, ctx), userHandler.GetUser)
+			users.GET(":id", userHandler.GetUser)
+		}
+
+		media := api.Group("media")
+		{
+			mediaHandler := handlers.MediaHandler{Dao: dao, Ctx: ctx}
+			media.POST("upload", middlewares.AccessTokenMiddleware(dao, ctx), mediaHandler.Upload)
+			media.POST("uploads", middlewares.AccessTokenMiddleware(dao, ctx), mediaHandler.Uploads)
 		}
 	}
 
+	router.Static("/assets", "./assets")
 	router.Run()
 }
