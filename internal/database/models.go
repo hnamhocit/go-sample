@@ -64,6 +64,15 @@ type Medium struct {
 	UserID      int32     `json:"user_id"`
 }
 
+type Post struct {
+	ID        int32     `json:"id"`
+	Title     string    `json:"title"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	UserID    int32     `json:"user_id"`
+}
+
 type User struct {
 	ID            int32          `json:"id"`
 	DisplayName   string         `json:"display_name"`

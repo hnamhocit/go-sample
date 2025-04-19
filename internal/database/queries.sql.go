@@ -8,7 +8,25 @@ package database
 import (
 	"context"
 	"database/sql"
+	"time"
 )
+
+const createPost = `-- name: CreatePost :execresult
+INSERT INTO
+	posts (user_id, title, content)
+VALUES
+	(?, ?, ?)
+`
+
+type CreatePostParams struct {
+	UserID  int32  `json:"user_id"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
+func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createPost, arg.UserID, arg.Title, arg.Content)
+}
 
 const createUser = `-- name: CreateUser :execresult
 INSERT INTO
@@ -37,6 +55,16 @@ func (q *Queries) DeleteMedia(ctx context.Context, id int32) (sql.Result, error)
 	return q.db.ExecContext(ctx, deleteMedia, id)
 }
 
+const deletePost = `-- name: DeletePost :execresult
+DELETE FROM posts
+WHERE
+	id = ?
+`
+
+func (q *Queries) DeletePost(ctx context.Context, id int32) (sql.Result, error) {
+	return q.db.ExecContext(ctx, deletePost, id)
+}
+
 const deleteUser = `-- name: DeleteUser :exec
 DELETE FROM users
 WHERE
@@ -46,6 +74,98 @@ WHERE
 func (q *Queries) DeleteUser(ctx context.Context, id int32) error {
 	_, err := q.db.ExecContext(ctx, deleteUser, id)
 	return err
+}
+
+const getPost = `-- name: GetPost :one
+SELECT
+	p.id AS post_id,
+	p.title AS post_title,
+	p.content AS post_content,
+	p.created_at AS post_created_at,
+	p.updated_at AS post_updated_at,
+	u.email AS user_email,
+	u.display_name AS user_display_name,
+	u.photo_url AS user_photo_url
+FROM
+	posts p
+	JOIN users u ON p.user_id = u.id
+WHERE
+	p.id = ?
+`
+
+type GetPostRow struct {
+	PostID          int32          `json:"post_id"`
+	PostTitle       string         `json:"post_title"`
+	PostContent     string         `json:"post_content"`
+	PostCreatedAt   time.Time      `json:"post_created_at"`
+	PostUpdatedAt   time.Time      `json:"post_updated_at"`
+	UserEmail       string         `json:"user_email"`
+	UserDisplayName string         `json:"user_display_name"`
+	UserPhotoUrl    sql.NullString `json:"user_photo_url"`
+}
+
+func (q *Queries) GetPost(ctx context.Context, id int32) (GetPostRow, error) {
+	row := q.db.QueryRowContext(ctx, getPost, id)
+	var i GetPostRow
+	err := row.Scan(
+		&i.PostID,
+		&i.PostTitle,
+		&i.PostContent,
+		&i.PostCreatedAt,
+		&i.PostUpdatedAt,
+		&i.UserEmail,
+		&i.UserDisplayName,
+		&i.UserPhotoUrl,
+	)
+	return i, err
+}
+
+const getPosts = `-- name: GetPosts :many
+SELECT
+	id, title, content, created_at, updated_at, user_id
+FROM
+	posts
+WHERE
+	id > ?
+ORDER BY
+	id ASC
+LIMIT
+	?
+`
+
+type GetPostsParams struct {
+	ID    int32 `json:"id"`
+	Limit int32 `json:"limit"`
+}
+
+func (q *Queries) GetPosts(ctx context.Context, arg GetPostsParams) ([]Post, error) {
+	rows, err := q.db.QueryContext(ctx, getPosts, arg.ID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Post
+	for rows.Next() {
+		var i Post
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Content,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.UserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getUser = `-- name: GetUser :one
@@ -174,6 +294,25 @@ func (q *Queries) GetUsers(ctx context.Context, arg GetUsersParams) ([]User, err
 		return nil, err
 	}
 	return items, nil
+}
+
+const updatePost = `-- name: UpdatePost :execresult
+UPDATE posts
+SET
+	title = ?,
+	content = ?
+WHERE
+	id = ?
+`
+
+type UpdatePostParams struct {
+	Title   string `json:"title"`
+	Content string `json:"content"`
+	ID      int32  `json:"id"`
+}
+
+func (q *Queries) UpdatePost(ctx context.Context, arg UpdatePostParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, updatePost, arg.Title, arg.Content, arg.ID)
 }
 
 const updateUser = `-- name: UpdateUser :execresult

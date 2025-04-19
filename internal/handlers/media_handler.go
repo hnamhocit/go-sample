@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"context"
-	"net/http"
 	"sample/internal/database"
 	"sample/internal/helpers"
 	"sample/internal/utils"
@@ -11,17 +9,13 @@ import (
 )
 
 type MediaHandler struct {
-	Dao *database.Queries
-	Ctx context.Context
+	BaseHandler
 }
 
 func (h *MediaHandler) Upload(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 0,
-			"msg":  err.Error(),
-		})
+		h.handleError(c, err.Error())
 		return
 	}
 
@@ -29,10 +23,7 @@ func (h *MediaHandler) Upload(c *gin.Context) {
 
 	id, ok := utils.GetUserID(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code": 0,
-			"msg":  "Unauthorized",
-		})
+		h.handleError(c, "Unauthorized")
 		return
 	}
 
@@ -44,29 +35,19 @@ func (h *MediaHandler) Upload(c *gin.Context) {
 		Path:        savedPath,
 	})
 	if uploadErr != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": 0,
-			"msg":  uploadErr.Error(),
-		})
+		h.handleError(c, uploadErr.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"msg":  "Success",
-		"data": gin.H{
-			"path": savedPath,
-		},
-	})
+	h.handleSuccess(c, gin.H{
+		"path": savedPath,
+	}, nil)
 }
 
 func (h *MediaHandler) Uploads(c *gin.Context) {
 	form, err := c.MultipartForm()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 0,
-			"msg":  err.Error(),
-		})
+		h.handleError(c, err.Error())
 		return
 	}
 
@@ -74,10 +55,7 @@ func (h *MediaHandler) Uploads(c *gin.Context) {
 
 	id, ok := utils.GetUserID(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code": 0,
-			"msg":  "Unauthorized",
-		})
+		h.handleError(c, "Unauthorized")
 		return
 	}
 
@@ -92,19 +70,12 @@ func (h *MediaHandler) Uploads(c *gin.Context) {
 			Path:        savedPath,
 		})
 		if uploadErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"code": 0,
-				"msg":  uploadErr.Error(),
-			})
+			h.handleError(c, uploadErr.Error())
 			return
 		}
 
 		paths = append(paths, savedPath)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 1,
-		"msg":  "Success",
-		"data": paths,
-	})
+	h.handleSuccess(c, paths, nil)
 }

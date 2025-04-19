@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -13,11 +12,10 @@ import (
 )
 
 type AuthHandler struct {
-	Dao *database.Queries
-	Ctx context.Context
+	BaseHandler
 }
 
-func (r *AuthHandler) UpdateRefreshToken(id int32, refreshToken *string) error {
+func (h *AuthHandler) UpdateRefreshToken(id int32, refreshToken *string) error {
 	if id <= 0 {
 		return fmt.Errorf("invalid user ID: %d", id)
 	}
@@ -40,7 +38,7 @@ func (r *AuthHandler) UpdateRefreshToken(id int32, refreshToken *string) error {
 		}
 	}
 
-	_, err := r.Dao.UpdateUserRefreshToken(r.Ctx, database.UpdateUserRefreshTokenParams{
+	_, err := h.Dao.UpdateUserRefreshToken(h.Ctx, database.UpdateUserRefreshTokenParams{
 		ID:           id,
 		RefreshToken: hashedRefreshToken,
 	})
@@ -56,54 +54,47 @@ type LoginDTO struct {
 	Password string `json:"password" binding:"required,min=8,max=100"`
 }
 
-func (r *AuthHandler) Login(c *gin.Context) {
+func (h *AuthHandler) Login(c *gin.Context) {
 	var input LoginDTO
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": err.Error()})
+		h.handleError(c, err.Error())
 		return
 	}
 
-	existingUser, err := r.Dao.GetUserByEmail(r.Ctx, input.Email)
+	existingUser, err := h.Dao.GetUserByEmail(h.Ctx, input.Email)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+		h.handleError(c, err.Error())
 		return
 	}
 
 	ok, err := utils.Verify(input.Password, existingUser.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+		h.handleError(c, err.Error())
 		return
 	}
 
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "Invalid credentials"})
+		h.handleError(c, "Invalid credentials")
 		return
 	}
 
 	tokens, err := utils.GenerateTokens(existingUser.ID, existingUser.TokenVersion+1)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+		h.handleError(c, err.Error())
 		return
 	}
 
-	updateErr := r.UpdateRefreshToken(existingUser.ID, nil)
+	updateErr := h.UpdateRefreshToken(existingUser.ID, nil)
 	if updateErr != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": 0,
-			"msg":  updateErr.Error(),
-		})
+		h.handleError(c, updateErr.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 1,
-		"msg":  "Login successfully!",
-		"data": gin.H{
-			"access_token":  tokens.AccessToken,
-			"refresh_token": tokens.RefreshToken,
-		},
-	})
+	h.handleSuccess(c, gin.H{
+		"access_token":  tokens.AccessToken,
+		"refresh_token": tokens.RefreshToken,
+	}, nil)
 }
 
 type RegisterDTO struct {
@@ -112,7 +103,7 @@ type RegisterDTO struct {
 	DisplayName string `json:"display_name" binding:"required,min=1,max=35"`
 }
 
-func (r *AuthHandler) Register(c *gin.Context) {
+func (h *AuthHandler) Register(c *gin.Context) {
 	var input RegisterDTO
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -120,194 +111,117 @@ func (r *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	_, err := r.Dao.GetUserByEmail(r.Ctx, input.Email)
+	_, err := h.Dao.GetUserByEmail(h.Ctx, input.Email)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"code": 0,
-				"msg":  err.Error(),
-			})
+			h.handleError(c, err.Error())
 			return
 		}
 	} else {
-		c.JSON(http.StatusConflict, gin.H{
-			"code": 0,
-			"msg":  "Email already exists!",
-		})
+		h.handleError(c, "Email already exists!")
 		return
 	}
 
 	hashedPassword, err := utils.Hash(input.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": 0,
-			"msg":  err.Error(),
-		})
+		h.handleError(c, err.Error())
 		return
 	}
 
-	newUser, err := r.Dao.CreateUser(r.Ctx, database.CreateUserParams{
+	newUser, err := h.Dao.CreateUser(h.Ctx, database.CreateUserParams{
 		DisplayName: input.DisplayName,
 		Email:       input.Email,
 		Password:    hashedPassword,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": 0,
-			"msg":  err.Error(),
-		})
+		h.handleError(c, err.Error())
 		return
 	}
 
 	id, err := newUser.LastInsertId()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": 0,
-			"msg":  err.Error(),
-		})
+		h.handleError(c, err.Error())
 		return
 	}
 
 	tokens, err := utils.GenerateTokens(int32(id), 0)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": 0,
-			"msg":  err.Error(),
-		})
+		h.handleError(c, err.Error())
 		return
 	}
 
-	updateErr := r.UpdateRefreshToken(int32(id), nil)
+	updateErr := h.UpdateRefreshToken(int32(id), nil)
 	if updateErr != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": 0,
-			"msg":  updateErr.Error(),
-		})
+		h.handleError(c, updateErr.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"msg":  "Register successfully!",
-		"data": gin.H{
-			"access_token":  tokens.AccessToken,
-			"refresh_token": tokens.RefreshToken,
-		},
-	})
+	h.handleSuccess(c, gin.H{
+		"access_token":  tokens.AccessToken,
+		"refresh_token": tokens.RefreshToken,
+	}, nil)
 }
 
-func (r *AuthHandler) Logout(c *gin.Context) {
-	userId, ok := c.Get("user_id")
+func (h *AuthHandler) Logout(c *gin.Context) {
+	id, ok := utils.GetUserID(c)
 	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 0,
-			"msg":  "Invalid user ID",
-		})
+		h.handleError(c, "Invalid user ID")
 		return
 	}
 
-	id, ok := userId.(int32)
-	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 0,
-			"msg":  "Covert user ID error",
-		})
-		return
-	}
-
-	updateErr := r.UpdateRefreshToken(id, nil)
+	updateErr := h.UpdateRefreshToken(*id, nil)
 	if updateErr != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": 0,
-			"msg":  updateErr.Error(),
-		})
+		h.handleError(c, updateErr.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"msg":  "Logout successfully!",
-	})
+	h.handleSuccess(c, nil, nil)
 }
 
-func (r *AuthHandler) Refresh(c *gin.Context) {
-	userId, ok := c.Get("user_id")
+func (h *AuthHandler) Refresh(c *gin.Context) {
+	id, ok := utils.GetUserID(c)
 	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 0,
-			"msg":  "Invalid user ID",
-		})
-		return
-	}
-
-	id, ok := userId.(int32)
-	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 0,
-			"msg":  "Covert user ID error",
-		})
+		h.handleError(c, "Invalid user ID")
 		return
 	}
 
 	refreshToken, ok := c.Get("refresh_token")
 	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 0,
-			"msg":  "Invalid refresh token",
-		})
+		h.handleError(c, "Invalid refresh token")
 		return
 	}
 
-	user, err := r.Dao.GetUser(r.Ctx, id)
+	user, err := h.Dao.GetUser(h.Ctx, *id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": 0,
-			"msg":  err.Error(),
-		})
+		h.handleError(c, err.Error())
 		return
 	}
 
 	ok, verifyErr := utils.Verify(refreshToken.(string), user.RefreshToken.String)
 	if verifyErr != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": 0,
-			"msg":  verifyErr.Error(),
-		})
+		h.handleError(c, verifyErr.Error())
 		return
 	}
 
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code": 0,
-			"msg":  "Invalid refresh token!",
-		})
+		h.handleError(c, "Invalid refresh token!")
 		return
 	}
 
-	tokens, err := utils.GenerateTokens(id, user.TokenVersion)
+	tokens, err := utils.GenerateTokens(*id, user.TokenVersion)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": 0,
-			"msg":  err.Error(),
-		})
+		h.handleError(c, err.Error())
 		return
 	}
 
-	updateErr := r.UpdateRefreshToken(id, &tokens.RefreshToken)
+	updateErr := h.UpdateRefreshToken(*id, &tokens.RefreshToken)
 	if updateErr != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": 0,
-			"msg":  updateErr.Error(),
-		})
+		h.handleError(c, updateErr.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 1,
-		"msg":  "Refresh token successfully!",
-		"data": gin.H{
-			"access_token":  tokens.AccessToken,
-			"refresh_token": tokens.RefreshToken,
-		},
-	})
+	h.handleSuccess(c, gin.H{
+		"access_token":  tokens.AccessToken,
+		"refresh_token": tokens.RefreshToken,
+	}, nil)
 }

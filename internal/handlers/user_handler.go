@@ -1,51 +1,38 @@
 package handlers
 
 import (
-	"context"
 	"sample/internal/database"
-	"sample/internal/dtos"
+	"sample/internal/helpers"
 
 	"github.com/gin-gonic/gin"
 )
 
 type UserHandler struct {
-	Dao *database.Queries
-	Ctx context.Context
+	BaseHandler
 }
 
-func (r *UserHandler) GetUsers(c *gin.Context) {
-	var pagination dtos.PaginationDTO
-
-	if err := c.ShouldBindQuery(&pagination); err != nil {
-		c.JSON(400, dtos.Response{
-			Code: 0,
-			Msg:  "Bad Request",
-		})
+func (h *UserHandler) GetUsers(c *gin.Context) {
+	pagination, err := helpers.ParsePagination(c)
+	if err != nil {
+		h.handleError(c, err.Error())
 		return
 	}
 
-	users, err := r.Dao.GetUsers(c, database.GetUsersParams{
-		Limit:  int32(pagination.Size),
-		Offset: int32((pagination.Page - 1) * pagination.Size),
+	users, err := h.Dao.GetUsers(c, database.GetUsersParams{
+		Limit:  int32(pagination.Limit),
+		Offset: int32((pagination.Page - 1) * pagination.Limit),
 	})
 
 	if err != nil {
-		c.JSON(500, dtos.Response{
-			Code: 0,
-			Msg:  "Internal Server Error",
-		})
+		h.handleError(c, err.Error())
 		return
 	}
 
-	c.JSON(200, dtos.Response{
-		Code: 1,
-		Msg:  "Success",
-		Data: users,
-	})
+	h.handleSuccess(c, users, nil)
 }
 
-func (r *UserHandler) GetUser(c *gin.Context) {}
+func (h *UserHandler) GetUser(c *gin.Context) {}
 
-func (r *UserHandler) UpdateUser(c *gin.Context) {}
+func (h *UserHandler) UpdateUser(c *gin.Context) {}
 
-func (r *UserHandler) DeleteUser(c *gin.Context) {}
+func (h *UserHandler) DeleteUser(c *gin.Context) {}
