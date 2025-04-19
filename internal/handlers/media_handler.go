@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sample/internal/database"
 	"sample/internal/helpers"
+	"sample/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,7 +27,7 @@ func (h *MediaHandler) Upload(c *gin.Context) {
 
 	savedPath := helpers.GenUniquePathAndSave(file, c)
 
-	userId, ok := c.Get("user_id")
+	id, ok := utils.GetUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"code": 0,
@@ -35,17 +36,8 @@ func (h *MediaHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	id, ok := userId.(int32)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code": 0,
-			"msg":  "Unauthorized!",
-		})
-		return
-	}
-
 	_, uploadErr := h.Dao.UploadMedia(h.Ctx, database.UploadMediaParams{
-		UserID:      id,
+		UserID:      *id,
 		Name:        file.Filename,
 		Size:        int32(file.Size),
 		ContentType: file.Header.Get("Content-Type"),
@@ -80,29 +72,20 @@ func (h *MediaHandler) Uploads(c *gin.Context) {
 
 	var paths []string
 
+	id, ok := utils.GetUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"code": 0,
+			"msg":  "Unauthorized",
+		})
+		return
+	}
+
 	for _, file := range form.File["files"] {
 		savedPath := helpers.GenUniquePathAndSave(file, c)
 
-		userId, ok := c.Get("user_id")
-		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"code": 0,
-				"msg":  "Unauthorized",
-			})
-			return
-		}
-
-		id, ok := userId.(int32)
-		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"code": 0,
-				"msg":  "Unauthorized!",
-			})
-			return
-		}
-
 		_, uploadErr := h.Dao.UploadMedia(h.Ctx, database.UploadMediaParams{
-			UserID:      id,
+			UserID:      *id,
 			Name:        file.Filename,
 			Size:        int32(file.Size),
 			ContentType: file.Header.Get("Content-Type"),
