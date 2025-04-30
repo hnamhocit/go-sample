@@ -75,7 +75,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	if !ok {
-		h.handleError(c, "Invalid credentials")
+		h.handleError(c, "Incorrect password!")
 		return
 	}
 

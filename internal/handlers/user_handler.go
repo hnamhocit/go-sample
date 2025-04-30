@@ -3,6 +3,7 @@ package handlers
 import (
 	"sample/internal/database"
 	"sample/internal/helpers"
+	"sample/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -29,6 +30,22 @@ func (h *UserHandler) GetUsers(c *gin.Context) {
 	}
 
 	h.handleSuccess(c, users, nil)
+}
+
+func (h *UserHandler) GetMe(c *gin.Context) {
+	id, ok := utils.GetUserID(c)
+	if !ok {
+		h.handleError(c, "Unauthorized!")
+		return
+	}
+
+	user, err := h.Dao.GetUser(h.Ctx, *id)
+	if err != nil {
+		h.handleError(c, err.Error())
+		return
+	}
+
+	h.handleSuccess(c, user, nil)
 }
 
 func (h *UserHandler) GetUser(c *gin.Context) {}

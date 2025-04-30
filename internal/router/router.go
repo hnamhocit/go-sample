@@ -32,7 +32,7 @@ func Run() {
 		{
 			userHandler := handlers.UserHandler{BaseHandler: baseHandler}
 			users.GET("", userHandler.GetUsers)
-			users.GET("me", middlewares.AccessTokenMiddleware(dao, ctx), userHandler.GetUser)
+			users.GET("me", middlewares.AccessTokenMiddleware(dao, ctx), userHandler.GetMe)
 			users.GET(":id", userHandler.GetUser)
 		}
 

@@ -14,7 +14,7 @@ func AccessTokenMiddleware(dao *database.Queries, ctx context.Context) gin.Handl
 	return func(c *gin.Context) {
 		authorization := c.GetHeader("Authorization")
 		if authorization == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized,
+			c.AbortWithStatusJSON(http.StatusOK,
 				gin.H{
 					"code": 0,
 					"msg":  "Unauthorized",
@@ -24,7 +24,7 @@ func AccessTokenMiddleware(dao *database.Queries, ctx context.Context) gin.Handl
 
 		tokenString := strings.Split(authorization, " ")[1]
 		if tokenString == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized,
+			c.AbortWithStatusJSON(http.StatusOK,
 				gin.H{
 					"code": 0,
 					"msg":  "Invalid token",
@@ -34,7 +34,7 @@ func AccessTokenMiddleware(dao *database.Queries, ctx context.Context) gin.Handl
 
 		claims, err := utils.VerifyToken(tokenString, "JWT_ACCESS_SECRET")
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized,
+			c.AbortWithStatusJSON(http.StatusOK,
 				gin.H{
 					"code": 0,
 					"msg":  err.Error(),
@@ -44,7 +44,7 @@ func AccessTokenMiddleware(dao *database.Queries, ctx context.Context) gin.Handl
 
 		tokenVersion, err := dao.GetUserTokenVersion(ctx, claims.Sub)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized,
+			c.AbortWithStatusJSON(http.StatusOK,
 				gin.H{
 					"code": 0,
 					"msg":  err.Error(),
@@ -53,7 +53,7 @@ func AccessTokenMiddleware(dao *database.Queries, ctx context.Context) gin.Handl
 		}
 
 		if tokenVersion != claims.TokenVersion {
-			c.AbortWithStatusJSON(http.StatusUnauthorized,
+			c.AbortWithStatusJSON(http.StatusOK,
 				gin.H{
 					"code": 0,
 					"msg":  "Token version mismatch",

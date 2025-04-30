@@ -29,14 +29,12 @@ func (h *BaseHandler) handleSuccess(c *gin.Context, data interface{}, msg *strin
 		Msg:  "Success",
 		Data: data,
 	})
-	return
 }
 
 func (h *BaseHandler) handleError(c *gin.Context, msg string) {
-	c.JSON(http.StatusInternalServerError, dtos.Response{
+	c.JSON(http.StatusOK, dtos.Response{
 		Code: 0,
 		Msg:  msg,
 		Data: nil,
 	})
-	return
 }
